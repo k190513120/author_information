@@ -99,10 +99,14 @@ def get_blogger_videos(blogger_id, query_count):
     # Return only up to query_count videos
     return all_video_data[:query_count]
 
-def send_webhook_data(webhook_url, video_data):
+def send_webhook_data(webhook_url, video_data, request_id):
     print(f"\n正在向webhook地址 {webhook_url} 回传视频数据...")
+    payload = {
+        "request_id": request_id,
+        "data": video_data
+    }
     try:
-        response = requests.post(webhook_url, json=video_data)
+        response = requests.post(webhook_url, json=payload)
         response.raise_for_status()
         print("视频数据回传成功！")
     except requests.exceptions.RequestException as e:
@@ -161,12 +165,14 @@ def main():
     parser.add_argument('--blogger_name', type=str, required=True, help='Name of the blogger.')
     parser.add_argument('--webhook_url', type=str, required=True, help='Webhook URL to send data to.')
     parser.add_argument('--quantity', type=int, default=10, help='Quantity of data to fetch (default: 10).')
+    parser.add_argument('--request_id', type=str, default='', help='Unique request ID.')
 
     args = parser.parse_args()
 
     blogger_name = args.blogger_name
     webhook_url = args.webhook_url
     query_count = args.quantity
+    request_id = args.request_id
 
     blogger_id = get_blogger_id(blogger_name)
 
@@ -193,7 +199,7 @@ def main():
                 print(json.dumps(video, indent=2, ensure_ascii=False))
             
             if webhook_url:
-                send_webhook_data(webhook_url, video_data)
+                send_webhook_data(webhook_url, video_data, request_id)
             else:
                 print("未提供webhook地址，跳过数据回传。")
         else:

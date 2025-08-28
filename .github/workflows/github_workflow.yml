@@ -15,6 +15,10 @@ on:
         description: 'Quantity of data to fetch'
         required: true
         type: number
+      request_id:
+        description: 'Unique request ID'
+        required: false
+        type: string
 
 jobs:
   scrape_data:
@@ -33,4 +37,4 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Run Python script
-      run: python main.py --blogger_name ${{ github.event.inputs.blogger_name }} --webhook_url ${{ github.event.inputs.webhook_url }} --quantity ${{ github.event.inputs.quantity }}
+      run: python main.py --blogger_name ${{ github.event.inputs.blogger_name }} --webhook_url ${{ github.event.inputs.webhook_url }} --quantity ${{ github.event.inputs.quantity }} --request_id ${{ github.event.inputs.request_id }}
