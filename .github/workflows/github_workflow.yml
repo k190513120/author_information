@@ -1,0 +1,36 @@
+name: Run Blogger Data Scraper
+
+on:
+  workflow_dispatch:
+    inputs:
+      blogger_name:
+        description: 'Blogger Name'
+        required: true
+        type: string
+      webhook_url:
+        description: 'Webhook URL'
+        required: true
+        type: string
+      quantity:
+        description: 'Quantity of data to fetch'
+        required: true
+        type: number
+
+jobs:
+  scrape_data:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.x'
+
+    - name: Install dependencies
+      run: pip install -r requirements.txt
+
+    - name: Run Python script
+      run: python main.py --blogger_name ${{ github.event.inputs.blogger_name }} --webhook_url ${{ github.event.inputs.webhook_url }} --quantity ${{ github.event.inputs.quantity }}
