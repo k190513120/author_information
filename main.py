@@ -132,19 +132,20 @@ def get_video_comments(object_id, object_nonce_id):
             data_str = result["data"]
             data_json = json.loads(data_str)
             
-            comments = data_json.get("output", [])
-            for comment in comments:
-                content = comment.get("content", "")
-                create_time = comment.get("createtime", "")
-                like_count = comment.get("likeCount", 0)
-                
-                # 格式化评论数据
-                formatted_comment = {
-                    "content": content,
-                    "create_time": create_time,
-                    "like_count": like_count
-                }
-                comments_list.append(formatted_comment)
+            comments = data_json.get("output")
+            if comments:
+                for comment in comments:
+                    content = comment.get("content", "")
+                    create_time = comment.get("createtime", "")
+                    like_count = comment.get("likeCount", 0)
+                    
+                    # 格式化评论数据
+                    formatted_comment = {
+                        "content": content,
+                        "create_time": create_time,
+                        "like_count": like_count
+                    }
+                    comments_list.append(formatted_comment)
         else:
             print(f"Error from comments API: {result.get('msg', 'Unknown error')}")
     except requests.exceptions.RequestException as e:
