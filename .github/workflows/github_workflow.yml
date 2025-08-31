@@ -37,4 +37,4 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Run Python script
-      run: python main.py --blogger_name ${{ github.event.inputs.blogger_name }} --webhook_url ${{ github.event.inputs.webhook_url }} --quantity ${{ github.event.inputs.quantity }} --request_id ${{ github.event.inputs.request_id }}
+      run: python main.py --blogger_name "${{ github.event.inputs.blogger_name }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
