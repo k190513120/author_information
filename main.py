@@ -101,16 +101,25 @@ def get_blogger_videos(blogger_id, query_count):
 
 def send_webhook_data(webhook_url, video_data, request_id):
     print(f"\n正在向webhook地址 {webhook_url} 回传视频数据...")
-    payload = {
-        "request_id": request_id,
-        "data": video_data
-    }
-    try:
-        response = requests.post(webhook_url, json=payload)
-        response.raise_for_status()
-        print("视频数据回传成功！")
-    except requests.exceptions.RequestException as e:
-        print(f"视频数据回传失败: {e}")
+    success_count = 0
+    total_count = len(video_data)
+    
+    for i, video in enumerate(video_data, 1):
+        payload = {
+            "request_id": request_id,
+            "video_index": i,
+            "total_videos": total_count,
+            "data": video
+        }
+        try:
+            response = requests.post(webhook_url, json=payload)
+            response.raise_for_status()
+            success_count += 1
+            print(f"视频 {i}/{total_count} 回传成功")
+        except requests.exceptions.RequestException as e:
+            print(f"视频 {i}/{total_count} 回传失败: {e}")
+    
+    print(f"\n回传完成！成功: {success_count}/{total_count}")
 
 def get_video_comments(object_id, object_nonce_id):
     url = "https://api.coze.cn/v1/workflow/run"
