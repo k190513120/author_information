@@ -1,6 +1,7 @@
 import requests
 import json
 import argparse
+import urllib.parse
 
 def get_blogger_id(blogger_name):
     url = "https://api.coze.cn/v1/workflow/run"
@@ -169,52 +170,144 @@ def get_video_comments(object_id, object_nonce_id):
     
     return comments_list
 
+def get_tiktok_secuid(tiktok_url):
+    """
+    从TikTok主页链接获取secuid
+    """
+    encoded_url = urllib.parse.quote(tiktok_url, safe='')
+    api_url = f"https://tiktok-api-miaomiaocompany-c35bd5a6.koyeb.app/api/tiktok/web/get_sec_user_id?url={encoded_url}"
+    
+    try:
+        response = requests.get(api_url)
+        response.raise_for_status()
+        result = response.json()
+        
+        if result.get("code") == 200 and "data" in result:
+            secuid = result["data"]
+            print(f"获取到的secuid: {secuid}")
+            return secuid
+        else:
+            print(f"获取secuid失败: {result}")
+            return None
+    except requests.exceptions.RequestException as e:
+        print(f"获取secuid请求失败: {e}")
+        return None
+    except json.JSONDecodeError as e:
+        print(f"解析secuid响应失败: {e}")
+        return None
+
+def get_tiktok_user_posts(secuid, count):
+    """
+    使用secuid获取TikTok用户的视频信息
+    """
+    api_url = "https://tiktok-api-miaomiaocompany-c35bd5a6.koyeb.app/api/tiktok/web/fetch_user_post"
+    params = {
+        "secUid": secuid,
+        "cursor": 0,
+        "count": count,
+        "coverFormat": 2
+    }
+    
+    try:
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        result = response.json()
+        
+        print(f"TikTok API响应: {json.dumps(result, indent=2, ensure_ascii=False)}")
+        
+        # 根据实际API响应结构解析数据
+        if result.get("code") == 200 and "data" in result:
+            data = result["data"]
+            if "itemList" in data:
+                videos = data["itemList"]
+                print(f"获取到 {len(videos)} 个TikTok视频")
+                return videos[:count]  # 限制返回数量
+            else:
+                print(f"API响应中未找到itemList: {data}")
+                return []
+        else:
+            print(f"获取TikTok用户视频失败: {result}")
+            return []
+    except requests.exceptions.RequestException as e:
+        print(f"获取TikTok用户视频请求失败: {e}")
+        return []
+    except json.JSONDecodeError as e:
+        print(f"解析TikTok用户视频响应失败: {e}")
+        return []
+
 def main():
     parser = argparse.ArgumentParser(description='Fetch blogger data and send to webhook.')
-    parser.add_argument('--blogger_name', type=str, required=True, help='Name of the blogger.')
+    parser.add_argument('--platform', type=str, required=True, choices=['wechat', 'tiktok'], help='Platform to scrape (wechat or tiktok).')
+    parser.add_argument('--blogger_name', type=str, help='Name of the blogger (for WeChat).')
+    parser.add_argument('--tiktok_url', type=str, help='TikTok homepage URL (for TikTok).')
     parser.add_argument('--webhook_url', type=str, required=True, help='Webhook URL to send data to.')
     parser.add_argument('--quantity', type=int, default=10, help='Quantity of data to fetch (default: 10).')
     parser.add_argument('--request_id', type=str, default='', help='Unique request ID.')
 
     args = parser.parse_args()
 
-    blogger_name = args.blogger_name
+    platform = args.platform
     webhook_url = args.webhook_url
     query_count = args.quantity
     request_id = args.request_id
 
-    blogger_id = get_blogger_id(blogger_name)
+    video_data = []
 
-    if blogger_id:
-        print(f"获取到的博主ID: {blogger_id}")
+    if platform == 'wechat':
+        if not args.blogger_name:
+            print("错误: WeChat平台需要提供blogger_name参数")
+            return
+        
+        blogger_name = args.blogger_name
+        blogger_id = get_blogger_id(blogger_name)
 
-        video_data = get_blogger_videos(blogger_id, query_count)
+        if blogger_id:
+            print(f"获取到的博主ID: {blogger_id}")
+            video_data = get_blogger_videos(blogger_id, query_count)
 
-        if video_data:
-            # 获取并添加评论数据
-            for video in video_data:
-                print(f"当前处理视频: {video}") # 添加这行用于调试
-                video_id = video.get('id')
-                object_nonce_id = video.get('objectNonceId') # 假设视频数据中包含 objectNonceId
-                if video_id and object_nonce_id:
-                    comments = get_video_comments(video_id, object_nonce_id)
-                    video['comments'] = comments
-                else:
-                    video['comments'] = []
-
-            # 打印包含评论的视频数据
-            print("\n获取到的包含评论的视频数据:")
-            for video in video_data:
-                print(json.dumps(video, indent=2, ensure_ascii=False))
-            
-            if webhook_url:
-                send_webhook_data(webhook_url, video_data, request_id)
-            else:
-                print("未提供webhook地址，跳过数据回传。")
+            if video_data:
+                # 获取并添加评论数据
+                for video in video_data:
+                    print(f"当前处理视频: {video}") # 添加这行用于调试
+                    video_id = video.get('id')
+                    object_nonce_id = video.get('objectNonceId') # 假设视频数据中包含 objectNonceId
+                    if video_id and object_nonce_id:
+                        comments = get_video_comments(video_id, object_nonce_id)
+                        video['comments'] = comments
+                    else:
+                        video['comments'] = []
         else:
-            print("未能获取到视频数据。")
+            print("未能获取到博主ID。")
+    
+    elif platform == 'tiktok':
+        if not args.tiktok_url:
+            print("错误: TikTok平台需要提供tiktok_url参数")
+            return
+        
+        tiktok_url = args.tiktok_url
+        print(f"正在处理TikTok链接: {tiktok_url}")
+        
+        # 获取secuid
+        secuid = get_tiktok_secuid(tiktok_url)
+        if secuid:
+            # 获取TikTok视频数据
+            video_data = get_tiktok_user_posts(secuid, query_count)
+        else:
+            print("未能获取到TikTok secuid。")
+
+    # 处理获取到的视频数据
+    if video_data:
+        # 打印获取到的视频数据
+        print(f"\n获取到的{platform}视频数据:")
+        for i, video in enumerate(video_data, 1):
+            print(f"视频 {i}: {json.dumps(video, indent=2, ensure_ascii=False)}")
+        
+        if webhook_url:
+            send_webhook_data(webhook_url, video_data, request_id)
+        else:
+            print("未提供webhook地址，跳过数据回传。")
     else:
-        print("未能获取到博主ID。")
+        print(f"未能获取到{platform}视频数据。")
 
 
 if __name__ == "__main__":

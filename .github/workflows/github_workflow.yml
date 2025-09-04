@@ -3,9 +3,20 @@ name: Run Blogger Data Scraper
 on:
   workflow_dispatch:
     inputs:
-      blogger_name:
-        description: 'Blogger Name'
+      platform:
+        description: 'Platform (wechat or tiktok)'
         required: true
+        type: choice
+        options:
+          - wechat
+          - tiktok
+      blogger_name:
+        description: 'Blogger Name (for WeChat)'
+        required: false
+        type: string
+      tiktok_url:
+        description: 'TikTok Homepage URL (for TikTok)'
+        required: false
         type: string
       webhook_url:
         description: 'Webhook URL'
@@ -37,4 +48,9 @@ jobs:
       run: pip install -r requirements.txt
 
     - name: Run Python script
-      run: python main.py --blogger_name "${{ github.event.inputs.blogger_name }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
+      run: |
+        if [ "${{ github.event.inputs.platform }}" = "wechat" ]; then
+          python main.py --platform wechat --blogger_name "${{ github.event.inputs.blogger_name }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
+        elif [ "${{ github.event.inputs.platform }}" = "tiktok" ]; then
+          python main.py --platform tiktok --tiktok_url "${{ github.event.inputs.tiktok_url }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
+        fi
