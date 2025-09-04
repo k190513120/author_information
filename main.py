@@ -196,15 +196,18 @@ def get_tiktok_secuid(tiktok_url):
         print(f"解析secuid响应失败: {e}")
         return None
 
-def get_tiktok_user_posts(secuid, count):
+def get_tiktok_user_posts(secuid, count, cursor=0):
     """
     使用secuid获取TikTok用户的视频信息
+    支持分页获取，返回包含videos、cursor和hasMore的完整结构
     """
     api_url = "https://tiktok-api-miaomiaocompany-c35bd5a6.koyeb.app/api/tiktok/web/fetch_user_post"
+    # 确保单次请求不超过30条
+    request_count = min(count, 30)
     params = {
         "secUid": secuid,
-        "cursor": 0,
-        "count": count,
+        "cursor": cursor,
+        "count": request_count,
         "coverFormat": 2
     }
     
@@ -218,22 +221,38 @@ def get_tiktok_user_posts(secuid, count):
         # 根据实际API响应结构解析数据
         if result.get("code") == 200 and "data" in result:
             data = result["data"]
-            if "itemList" in data:
-                videos = data["itemList"]
-                print(f"获取到 {len(videos)} 个TikTok视频")
-                return videos[:count]  # 限制返回数量
-            else:
-                print(f"API响应中未找到itemList: {data}")
-                return []
+            videos = data.get("itemList", [])
+            next_cursor = data.get("cursor", "")
+            has_more = data.get("hasMore", False)
+            
+            print(f"获取到 {len(videos)} 个TikTok视频，cursor: {next_cursor}, hasMore: {has_more}")
+            
+            return {
+                "videos": videos,
+                "cursor": next_cursor,
+                "hasMore": has_more
+            }
         else:
             print(f"获取TikTok用户视频失败: {result}")
-            return []
+            return {
+                "videos": [],
+                "cursor": "",
+                "hasMore": False
+            }
     except requests.exceptions.RequestException as e:
         print(f"获取TikTok用户视频请求失败: {e}")
-        return []
+        return {
+            "videos": [],
+            "cursor": "",
+            "hasMore": False
+        }
     except json.JSONDecodeError as e:
         print(f"解析TikTok用户视频响应失败: {e}")
-        return []
+        return {
+            "videos": [],
+            "cursor": "",
+            "hasMore": False
+        }
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch blogger data and send to webhook.')
@@ -290,8 +309,46 @@ def main():
         # 获取secuid
         secuid = get_tiktok_secuid(tiktok_url)
         if secuid:
-            # 获取TikTok视频数据
-            video_data = get_tiktok_user_posts(secuid, query_count)
+            # 循环获取TikTok视频数据直到hasMore为false或达到指定数量
+            all_videos = []
+            cursor = 0
+            retrieved_count = 0
+            
+            print(f"\n正在获取TikTok博主的视频数据，目标数量: {query_count}")
+            
+            while retrieved_count < query_count:
+                # 计算本次请求需要获取的数量
+                remaining_count = query_count - retrieved_count
+                current_request_count = min(remaining_count, 30)  # 单次最多30条
+                
+                print(f"正在请求第 {len(all_videos) // 30 + 1} 页，cursor: {cursor}，请求数量: {current_request_count}")
+                
+                # 获取当前页的视频数据
+                result = get_tiktok_user_posts(secuid, current_request_count, cursor)
+                
+                if not result["videos"]:
+                    print("未获取到视频数据，停止请求")
+                    break
+                
+                # 添加到总列表
+                all_videos.extend(result["videos"])
+                retrieved_count += len(result["videos"])
+                
+                print(f"本次获取 {len(result['videos'])} 个视频，累计: {retrieved_count}/{query_count}")
+                
+                # 检查是否还有更多数据
+                if not result["hasMore"]:
+                    print("已获取所有可用视频")
+                    break
+                
+                # 更新cursor用于下次请求
+                cursor = result["cursor"]
+                if not cursor:
+                    print("cursor为空，停止请求")
+                    break
+            
+            video_data = all_videos[:query_count]  # 确保不超过请求数量
+            print(f"\n最终获取到 {len(video_data)} 个TikTok视频")
         else:
             print("未能获取到TikTok secuid。")
 
