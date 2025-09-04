@@ -4,18 +4,23 @@ on:
   workflow_dispatch:
     inputs:
       platform:
-        description: 'Platform (wechat or tiktok)'
+        description: 'Platform (wechat, tiktok, or bilibili)'
         required: true
         type: choice
         options:
           - wechat
           - tiktok
+          - bilibili
       blogger_name:
         description: 'Blogger Name (for WeChat)'
         required: false
         type: string
       tiktok_url:
         description: 'TikTok Homepage URL (for TikTok)'
+        required: false
+        type: string
+      bilibili_url:
+        description: 'Bilibili Homepage URL (for Bilibili)'
         required: false
         type: string
       webhook_url:
@@ -53,4 +58,6 @@ jobs:
           python main.py --platform wechat --blogger_name "${{ github.event.inputs.blogger_name }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
         elif [ "${{ github.event.inputs.platform }}" = "tiktok" ]; then
           python main.py --platform tiktok --tiktok_url "${{ github.event.inputs.tiktok_url }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
+        elif [ "${{ github.event.inputs.platform }}" = "bilibili" ]; then
+          python main.py --platform bilibili --bilibili_url "${{ github.event.inputs.bilibili_url }}" --webhook_url "${{ github.event.inputs.webhook_url }}" --quantity ${{ github.event.inputs.quantity }} --request_id "${{ github.event.inputs.request_id }}"
         fi

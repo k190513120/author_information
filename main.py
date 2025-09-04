@@ -170,6 +170,103 @@ def get_video_comments(object_id, object_nonce_id):
     
     return comments_list
 
+def extract_bilibili_uid(bilibili_url):
+    """
+    从B站链接中提取UID
+    例如: https://space.bilibili.com/946974?spm_id_from=333.337.0.0 -> 946974
+    """
+    import re
+    
+    # 使用正则表达式提取UID
+    pattern = r'space\.bilibili\.com/(\d+)'
+    match = re.search(pattern, bilibili_url)
+    
+    if match:
+        uid = match.group(1)
+        print(f"从B站链接 {bilibili_url} 提取到UID: {uid}")
+        return uid
+    else:
+        print(f"无法从B站链接 {bilibili_url} 提取UID")
+        return None
+
+def get_bilibili_user_posts(uid, count, pn=1):
+    """
+    使用UID获取B站用户的视频信息
+    支持分页获取，返回包含videos、hasMore的结构
+    """
+    api_url = "https://tiktok-api-miaomiaocompany-c35bd5a6.koyeb.app/api/bilibili/web/fetch_user_post_videos"
+    params = {
+        "uid": uid,
+        "pn": pn
+    }
+    
+    try:
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()
+        result = response.json()
+        
+        print(f"B站API响应 (页码{pn}): {json.dumps(result, indent=2, ensure_ascii=False)}")
+        
+        # 根据实际API响应结构解析数据
+        if result.get("code") == 200 and "data" in result:
+            # API返回结构: {"code": 200, "data": {"code": 0, "data": {"list": {"vlist": [视频数组]}}}}
+            outer_data = result["data"]
+            if outer_data.get("code") == 0 and "data" in outer_data:
+                inner_data = outer_data["data"]
+                if "list" in inner_data:
+                    list_data = inner_data["list"]
+                    videos = list_data.get("vlist", [])
+                    # 从tlist获取总数统计信息
+                    tlist = list_data.get("tlist", {})
+                    total_count = sum(category.get("count", 0) for category in tlist.values())
+                    
+                    page_info = {
+                        "pn": pn,
+                        "ps": 20, 
+                        "count": total_count
+                    }
+                    print(f"Debug: 成功解析到 {len(videos)} 个视频, 总计: {total_count}, 页码: {pn}")
+                    
+                    # 计算是否还有更多页面
+                    current_page = pn
+                    page_size = 20
+                    
+                    # 判断是否还有更多数据
+                    has_more = (current_page * page_size) < total_count
+                    
+                    print(f"获取到 {len(videos)} 个B站视频 (页码{pn})，总数: {total_count}，hasMore: {has_more}")
+                    
+                    return {
+                        "videos": videos,
+                        "hasMore": has_more,
+                        "totalCount": total_count,
+                        "currentPage": current_page
+                    }
+        else:
+            print(f"获取B站用户视频失败: {result}")
+            return {
+                "videos": [],
+                "hasMore": False,
+                "totalCount": 0,
+                "currentPage": pn
+            }
+    except requests.exceptions.RequestException as e:
+        print(f"获取B站用户视频请求失败: {e}")
+        return {
+            "videos": [],
+            "hasMore": False,
+            "totalCount": 0,
+            "currentPage": pn
+        }
+    except json.JSONDecodeError as e:
+        print(f"解析B站用户视频响应失败: {e}")
+        return {
+            "videos": [],
+            "hasMore": False,
+            "totalCount": 0,
+            "currentPage": pn
+        }
+
 def get_tiktok_secuid(tiktok_url):
     """
     从TikTok主页链接获取secuid
@@ -256,9 +353,10 @@ def get_tiktok_user_posts(secuid, count, cursor=0):
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch blogger data and send to webhook.')
-    parser.add_argument('--platform', type=str, required=True, choices=['wechat', 'tiktok'], help='Platform to scrape (wechat or tiktok).')
+    parser.add_argument('--platform', type=str, required=True, choices=['wechat', 'tiktok', 'bilibili'], help='Platform to scrape (wechat, tiktok, or bilibili).')
     parser.add_argument('--blogger_name', type=str, help='Name of the blogger (for WeChat).')
     parser.add_argument('--tiktok_url', type=str, help='TikTok homepage URL (for TikTok).')
+    parser.add_argument('--bilibili_url', type=str, help='Bilibili homepage URL (for Bilibili).')
     parser.add_argument('--webhook_url', type=str, required=True, help='Webhook URL to send data to.')
     parser.add_argument('--quantity', type=int, default=10, help='Quantity of data to fetch (default: 10).')
     parser.add_argument('--request_id', type=str, default='', help='Unique request ID.')
@@ -351,6 +449,64 @@ def main():
             print(f"\n最终获取到 {len(video_data)} 个TikTok视频")
         else:
             print("未能获取到TikTok secuid。")
+    
+    elif platform == 'bilibili':
+        if not args.bilibili_url:
+            print("错误: Bilibili平台需要提供bilibili_url参数")
+            return
+        
+        bilibili_url = args.bilibili_url
+        print(f"正在处理B站链接: {bilibili_url}")
+        
+        # 提取UID
+        uid = extract_bilibili_uid(bilibili_url)
+        if uid:
+            # 循环获取B站视频数据直到hasMore为false或达到指定数量
+            all_videos = []
+            pn = 1  # 页码从1开始
+            retrieved_count = 0
+            
+            print(f"\n正在获取B站博主的视频数据，目标数量: {query_count}")
+            
+            while retrieved_count < query_count:
+                print(f"正在请求第 {pn} 页")
+                
+                # 获取当前页的视频数据
+                result = get_bilibili_user_posts(uid, query_count, pn)
+                
+                print(f"API返回结果: videos数量={len(result['videos'])}, hasMore={result['hasMore']}, totalCount={result['totalCount']}")
+                
+                if not result["videos"]:
+                    print("未获取到视频数据，停止请求")
+                    break
+                
+                # 添加到总列表
+                current_videos = result["videos"]
+                remaining_needed = query_count - retrieved_count
+                videos_to_add = current_videos[:remaining_needed]  # 只取需要的数量
+                
+                all_videos.extend(videos_to_add)
+                retrieved_count += len(videos_to_add)
+                
+                print(f"本次获取 {len(videos_to_add)} 个视频，累计: {retrieved_count}/{query_count}")
+                
+                # 如果已经获取到足够的视频，停止请求
+                if retrieved_count >= query_count:
+                    print("已获取到足够数量的视频")
+                    break
+                
+                # 检查是否还有更多数据
+                if not result["hasMore"]:
+                    print("已获取所有可用视频")
+                    break
+                
+                # 下一页
+                pn += 1
+            
+            video_data = all_videos[:query_count]  # 确保不超过请求数量
+            print(f"\n最终获取到 {len(video_data)} 个B站视频")
+        else:
+            print("未能从B站链接提取UID。")
 
     # 处理获取到的视频数据
     if video_data:
